@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSessionUser, noStore } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { ensureSampleData } from "@/lib/sample-data";
 import type { EventRow, StageRow } from "@/lib/types";
@@ -14,22 +15,38 @@ function isUuid(value: string): boolean {
   );
 }
 
-export async function GET(_request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   try {
     const { id } = await params;
     if (!isUuid(id)) {
-      return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Evento não encontrado." },
+        { status: 404, headers: noStore },
+      );
     }
 
-    await ensureSampleData();
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Faça login para ver este evento." },
+        { status: 401, headers: noStore },
+      );
+    }
+
+    await ensureSampleData(user.id);
 
     const events = await sql<EventRow>(
-      "select id, name, created_at from events where id = $1",
-      [id],
+      `select id, name, created_at, owner_user_id
+       from events
+       where id = $1 and owner_user_id = $2`,
+      [id, user.id],
     );
     const event = events[0];
     if (!event) {
-      return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Evento não encontrado." },
+        { status: 404, headers: noStore },
+      );
     }
 
     const stages = await sql<StageRow>(
@@ -40,12 +57,19 @@ export async function GET(_request: Request, { params }: Params) {
       [id],
     );
 
-    return NextResponse.json({ event, stages });
+    return NextResponse.json(
+      {
+        event: { ...event, is_owner: true },
+        stages,
+        authenticated: true,
+      },
+      { headers: noStore },
+    );
   } catch (error) {
     console.error("GET /api/events/[id] failed");
     return NextResponse.json(
       { error: "Não foi possível carregar o evento." },
-      { status: 500 },
+      { status: 500, headers: noStore },
     );
   }
 }

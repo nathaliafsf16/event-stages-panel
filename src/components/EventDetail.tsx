@@ -24,6 +24,7 @@ function formatDate(value: string | Date | null): string | null {
 export function EventDetail({ eventId }: Props) {
   const [event, setEvent] = useState<EventRow | null>(null);
   const [stages, setStages] = useState<StageRow[]>([]);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,16 +33,29 @@ export function EventDetail({ eventId }: Props) {
   const [notes, setNotes] = useState("");
   const [sortOrder, setSortOrder] = useState("");
 
+  const canEdit = Boolean(event?.is_owner);
+
   async function load() {
     setLoading(true);
     setError(null);
+    setNeedsLogin(false);
     try {
-      const res = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const res = await fetch(`/api/events/${eventId}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       const data = (await res.json()) as {
         event?: EventRow;
         stages?: StageRow[];
         error?: string;
       };
+      if (res.status === 401) {
+        setNeedsLogin(true);
+        setEvent(null);
+        setStages([]);
+        setError(data.error ?? "Faça login para ver este evento.");
+        return;
+      }
       if (!res.ok || !data.event) {
         setError(data.error ?? "Evento não encontrado.");
         setEvent(null);
@@ -63,6 +77,10 @@ export function EventDetail({ eventId }: Props) {
 
   async function onAddStage(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
+    if (!canEdit) {
+      setError("Só quem criou este evento pode adicionar etapas.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -74,6 +92,7 @@ export function EventDetail({ eventId }: Props) {
       const res = await fetch(`/api/events/${eventId}/stages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { stage?: StageRow; error?: string };
@@ -107,7 +126,7 @@ export function EventDetail({ eventId }: Props) {
         <p className={styles.error}>{error ?? "Evento não encontrado."}</p>
         <p>
           <Link className={styles.back} href="/">
-            Voltar aos eventos
+            {needsLogin ? "Ir para o login" : "Voltar aos eventos"}
           </Link>
         </p>
       </div>
@@ -144,7 +163,7 @@ export function EventDetail({ eventId }: Props) {
               : `${stages.length} etapa${stages.length === 1 ? "" : "s"} no fluxo.`}
           </p>
           {stages.length === 0 ? (
-            <p className={styles.empty}>Inclua a primeira etapa no formulário abaixo.</p>
+            <p className={styles.empty}>Inclua a primeira etapa no formulário ao lado.</p>
           ) : (
             <ol className={styles.stageList}>
               {stages.map((stage) => {
@@ -176,58 +195,68 @@ export function EventDetail({ eventId }: Props) {
           <h2 id="nova-etapa" className={styles.panelTitle}>
             Nova etapa
           </h2>
-          <p className={styles.panelHint}>Nome obrigatório; data, notas e ordem são opcionais.</p>
-          <form className={styles.form} onSubmit={onAddStage}>
-            <label className={styles.label}>
-              Nome da etapa
-              <input
-                className={styles.input}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={120}
-                required
-                placeholder="Ex.: Montagem do palco"
-                autoComplete="off"
-              />
-            </label>
-            <div className={styles.row}>
-              <label className={styles.label}>
-                Data (opcional)
-                <input
-                  className={styles.input}
-                  type="date"
-                  value={stageDate}
-                  onChange={(e) => setStageDate(e.target.value)}
-                />
-              </label>
-              <label className={styles.label}>
-                Ordem (opcional)
-                <input
-                  className={styles.input}
-                  type="number"
-                  min={0}
-                  max={10000}
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  placeholder="Automática"
-                />
-              </label>
-            </div>
-            <label className={styles.label}>
-              Notas (opcional)
-              <textarea
-                className={styles.textarea}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                maxLength={500}
-                placeholder="Observações curtas para a equipe"
-              />
-            </label>
-            <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
-              {saving ? "Salvando…" : "Adicionar etapa"}
-            </button>
-            {error ? <p className={styles.error}>{error}</p> : null}
-          </form>
+          {canEdit ? (
+            <>
+              <p className={styles.panelHint}>
+                Nome obrigatório; data, notas e ordem são opcionais.
+              </p>
+              <form className={styles.form} onSubmit={onAddStage}>
+                <label className={styles.label}>
+                  Nome da etapa
+                  <input
+                    className={styles.input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={120}
+                    required
+                    placeholder="Ex.: Montagem do palco"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className={styles.row}>
+                  <label className={styles.label}>
+                    Data (opcional)
+                    <input
+                      className={styles.input}
+                      type="date"
+                      value={stageDate}
+                      onChange={(e) => setStageDate(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Ordem (opcional)
+                    <input
+                      className={styles.input}
+                      type="number"
+                      min={0}
+                      max={10000}
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                      placeholder="Automática"
+                    />
+                  </label>
+                </div>
+                <label className={styles.label}>
+                  Notas (opcional)
+                  <textarea
+                    className={styles.textarea}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength={500}
+                    placeholder="Observações curtas para a equipe"
+                  />
+                </label>
+                <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
+                  {saving ? "Salvando…" : "Adicionar etapa"}
+                </button>
+                {error ? <p className={styles.error}>{error}</p> : null}
+              </form>
+            </>
+          ) : (
+            <p className={styles.panelHint}>
+              Faça login com a conta que criou este evento para adicionar etapas.
+            </p>
+          )}
         </section>
       </div>
     </div>
