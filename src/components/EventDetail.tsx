@@ -24,7 +24,7 @@ function formatDate(value: string | Date | null): string | null {
 export function EventDetail({ eventId }: Props) {
   const [event, setEvent] = useState<EventRow | null>(null);
   const [stages, setStages] = useState<StageRow[]>([]);
-  const [authenticated, setAuthenticated] = useState(false);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,29 +33,37 @@ export function EventDetail({ eventId }: Props) {
   const [notes, setNotes] = useState("");
   const [sortOrder, setSortOrder] = useState("");
 
-  const canEdit = Boolean(authenticated && event?.is_owner);
+  const canEdit = Boolean(event?.is_owner);
 
   async function load() {
     setLoading(true);
     setError(null);
+    setNeedsLogin(false);
     try {
-      const res = await fetch(`/api/events/${eventId}`, { cache: "no-store" });
+      const res = await fetch(`/api/events/${eventId}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       const data = (await res.json()) as {
         event?: EventRow;
         stages?: StageRow[];
-        authenticated?: boolean;
         error?: string;
       };
+      if (res.status === 401) {
+        setNeedsLogin(true);
+        setEvent(null);
+        setStages([]);
+        setError(data.error ?? "Faça login para ver este evento.");
+        return;
+      }
       if (!res.ok || !data.event) {
         setError(data.error ?? "Evento não encontrado.");
         setEvent(null);
         setStages([]);
-        setAuthenticated(false);
         return;
       }
       setEvent(data.event);
       setStages(data.stages ?? []);
-      setAuthenticated(Boolean(data.authenticated));
     } catch {
       setError("Não foi possível carregar o evento.");
     } finally {
@@ -84,6 +92,7 @@ export function EventDetail({ eventId }: Props) {
       const res = await fetch(`/api/events/${eventId}/stages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { stage?: StageRow; error?: string };
@@ -117,7 +126,7 @@ export function EventDetail({ eventId }: Props) {
         <p className={styles.error}>{error ?? "Evento não encontrado."}</p>
         <p>
           <Link className={styles.back} href="/">
-            Voltar aos eventos
+            {needsLogin ? "Ir para o login" : "Voltar aos eventos"}
           </Link>
         </p>
       </div>
@@ -154,11 +163,7 @@ export function EventDetail({ eventId }: Props) {
               : `${stages.length} etapa${stages.length === 1 ? "" : "s"} no fluxo.`}
           </p>
           {stages.length === 0 ? (
-            <p className={styles.empty}>
-              {canEdit
-                ? "Inclua a primeira etapa no formulário abaixo."
-                : "Somente o criador pode incluir etapas."}
-            </p>
+            <p className={styles.empty}>Inclua a primeira etapa no formulário ao lado.</p>
           ) : (
             <ol className={styles.stageList}>
               {stages.map((stage) => {
@@ -249,9 +254,7 @@ export function EventDetail({ eventId }: Props) {
             </>
           ) : (
             <p className={styles.panelHint}>
-              {authenticated
-                ? "Você pode ver este evento, mas só o criador pode adicionar etapas."
-                : "Faça login no Cursor para alterar etapas dos seus eventos."}
+              Faça login com a conta que criou este evento para adicionar etapas.
             </p>
           )}
         </section>

@@ -1,25 +1,27 @@
 import { NextResponse } from "next/server";
-import { optionalViewer, viewerLabel } from "@/lib/auth";
+import { getSessionUser, noStore } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const identity = await optionalViewer(request);
-  if (!identity.verified) {
+  try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ authenticated: false }, { headers: noStore });
+    }
     return NextResponse.json(
-      { authenticated: false },
-      { headers: { "cache-control": "private, no-store" } },
+      {
+        authenticated: true,
+        user: { id: user.id, email: user.email, name: user.name },
+      },
+      { headers: noStore },
+    );
+  } catch (error) {
+    console.error("GET /api/me failed");
+    return NextResponse.json(
+      { error: "Não foi possível verificar a sessão." },
+      { status: 500, headers: noStore },
     );
   }
-
-  return NextResponse.json(
-    {
-      authenticated: true,
-      name: viewerLabel(identity),
-      email: identity.kind === "person" ? identity.email : "",
-      simulated: identity.simulated === true,
-    },
-    { headers: { "cache-control": "private, no-store" } },
-  );
 }

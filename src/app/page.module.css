@@ -80,10 +80,16 @@
   font-size: 0.95rem;
 }
 
+.viewerBlock {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
 .viewerBadge,
 .viewerBadgeMuted {
   margin: 0.15rem 0 0;
-  flex-shrink: 0;
   font-size: 0.82rem;
   letter-spacing: 0.01em;
 }
@@ -94,6 +100,25 @@
 
 .viewerBadgeMuted {
   color: var(--ink-soft);
+}
+
+.linkButton {
+  border: 0;
+  background: transparent;
+  color: var(--sage-deep);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.linkButton:hover,
+.linkButton:focus-visible {
+  color: var(--ink);
+  outline: none;
 }
 
 .sampleBadge {

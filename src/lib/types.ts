@@ -2,7 +2,7 @@ export type EventRow = {
   id: string;
   name: string;
   created_at: string | Date;
-  owner_sub?: string | null;
+  owner_user_id?: string | null;
   stage_count?: number | string;
   is_owner?: boolean;
 };
@@ -19,4 +19,10 @@ export type StageRow = {
 
 export type EventWithStages = EventRow & {
   stages: StageRow[];
+};
+
+export type PublicUser = {
+  id: string;
+  email: string;
+  name: string;
 };

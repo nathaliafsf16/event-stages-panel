@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { optionalViewer } from "@/lib/auth";
+import { getSessionUser, noStore } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { ensureSampleData } from "@/lib/sample-data";
 import type { EventRow, StageRow } from "@/lib/types";
@@ -8,8 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
-
-const noStore = { "cache-control": "private, no-store" };
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -27,14 +25,21 @@ export async function GET(request: Request, { params }: Params) {
       );
     }
 
-    const identity = await optionalViewer(request);
-    if (identity.verified) {
-      await ensureSampleData(identity.sub);
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Faça login para ver este evento." },
+        { status: 401, headers: noStore },
+      );
     }
 
+    await ensureSampleData(user.id);
+
     const events = await sql<EventRow>(
-      "select id, name, created_at, owner_sub from events where id = $1",
-      [id],
+      `select id, name, created_at, owner_user_id
+       from events
+       where id = $1 and owner_user_id = $2`,
+      [id, user.id],
     );
     const event = events[0];
     if (!event) {
@@ -52,15 +57,11 @@ export async function GET(request: Request, { params }: Params) {
       [id],
     );
 
-    const isOwner = Boolean(
-      identity.verified && event.owner_sub === identity.sub,
-    );
-
     return NextResponse.json(
       {
-        event: { ...event, is_owner: isOwner },
+        event: { ...event, is_owner: true },
         stages,
-        authenticated: identity.verified,
+        authenticated: true,
       },
       { headers: noStore },
     );

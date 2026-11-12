@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import styles from "@/app/page.module.css";
-import type { EventRow } from "@/lib/types";
+import { AuthPanel } from "@/components/AuthPanel";
+import type { EventRow, PublicUser } from "@/lib/types";
 
 type EventsResponse = {
   events: EventRow[];
@@ -14,9 +15,8 @@ type EventsResponse = {
 
 type MeResponse = {
   authenticated: boolean;
-  name?: string;
-  email?: string;
-  simulated?: boolean;
+  user?: PublicUser;
+  error?: string;
 };
 
 function formatDate(value: string | Date): string {
@@ -30,36 +30,24 @@ function formatDate(value: string | Date): string {
 }
 
 export function EventList() {
+  const [user, setUser] = useState<PublicUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [sample, setSample] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [viewerName, setViewerName] = useState<string | null>(null);
-  const [simulated, setSimulated] = useState(false);
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  async function loadMe() {
-    try {
-      const res = await fetch("/api/me", { cache: "no-store" });
-      const data = (await res.json()) as MeResponse;
-      setAuthenticated(Boolean(data.authenticated));
-      setViewerName(data.authenticated ? (data.name ?? "Usuário") : null);
-      setSimulated(Boolean(data.simulated));
-    } catch {
-      setAuthenticated(false);
-      setViewerName(null);
-      setSimulated(false);
-    }
-  }
-
-  async function loadEvents() {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/events", { cache: "no-store" });
+      const res = await fetch("/api/events", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       const data = (await res.json()) as EventsResponse;
       if (!res.ok) {
         setError(data.error ?? "Não foi possível carregar os eventos.");
@@ -67,23 +55,51 @@ export function EventList() {
       }
       setEvents(data.events);
       setSample(Boolean(data.sample));
-      setAuthenticated(Boolean(data.authenticated));
     } catch {
       setError("Não foi possível carregar os eventos.");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    void loadMe();
-    void loadEvents();
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/me", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const data = (await res.json()) as MeResponse;
+        if (cancelled) return;
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
+      } catch {
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (user) void loadEvents();
+    else {
+      setEvents([]);
+      setSample(false);
+    }
+  }, [user, loadEvents]);
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!authenticated) {
-      setError("Faça login no Cursor para criar eventos.");
+    if (!user) {
+      setError("Faça login para criar eventos.");
       return;
     }
     setSaving(true);
@@ -93,6 +109,7 @@ export function EventList() {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ name }),
       });
       const data = (await res.json()) as {
@@ -114,29 +131,58 @@ export function EventList() {
     }
   }
 
+  async function onLogout() {
+    setError(null);
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      // still clear local state
+    }
+    setUser(null);
+    setEvents([]);
+    setSample(false);
+    setSuccess(null);
+  }
+
+  if (!authChecked) {
+    return <p className={styles.empty}>Carregando…</p>;
+  }
+
+  if (!user) {
+    return (
+      <AuthPanel
+        onAuthed={(next) => {
+          setUser(next);
+          setError(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className={styles.layout}>
       <section className={`${styles.panel} rise rise-delay-2`} aria-labelledby="eventos-titulo">
         <div className={styles.panelHead}>
           <div>
             <h2 id="eventos-titulo" className={styles.panelTitle}>
-              Eventos
+              Seus eventos
             </h2>
             <p className={styles.panelHint}>
               Abra um evento para ver e incluir as etapas da produção.
             </p>
           </div>
-          {authenticated && viewerName ? (
-            <p className={styles.viewerBadge} title={simulated ? "Identidade simulada no preview" : undefined}>
-              {simulated ? "Preview · " : ""}
-              {viewerName}
-            </p>
-          ) : (
-            <p className={styles.viewerBadgeMuted}>Sem login</p>
-          )}
+          <div className={styles.viewerBlock}>
+            <p className={styles.viewerBadge}>{user.name}</p>
+            <button className={styles.linkButton} type="button" onClick={() => void onLogout()}>
+              Sair
+            </button>
+          </div>
         </div>
         {sample ? (
-          <p className={styles.sampleBadge}>Dados de exemplo para pré-visualização</p>
+          <p className={styles.sampleBadge}>Dados de exemplo para começar</p>
         ) : null}
         {loading ? <p className={styles.empty}>Carregando eventos…</p> : null}
         {!loading && events.length === 0 ? (
@@ -152,7 +198,6 @@ export function EventList() {
                     {Number(item.stage_count ?? 0)} etapa
                     {Number(item.stage_count ?? 0) === 1 ? "" : "s"}
                     {item.created_at ? ` · criado em ${formatDate(item.created_at)}` : ""}
-                    {item.is_owner ? " · seu evento" : ""}
                   </span>
                 </Link>
               </li>
@@ -165,38 +210,29 @@ export function EventList() {
         <h2 id="novo-evento" className={styles.panelTitle}>
           Novo evento
         </h2>
-        {authenticated ? (
-          <>
-            <p className={styles.panelHint}>Só o nome basta para começar. Só você poderá editar.</p>
-            <form className={styles.form} onSubmit={onCreate}>
-              <label className={styles.label}>
-                Nome do evento
-                <input
-                  className={styles.input}
-                  name="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={120}
-                  required
-                  placeholder="Ex.: Conferência Aurora 2026"
-                  autoComplete="off"
-                />
-              </label>
-              <div className={styles.actions}>
-                <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
-                  {saving ? "Salvando…" : "Criar evento"}
-                </button>
-              </div>
-              {error ? <p className={styles.error}>{error}</p> : null}
-              {success ? <p className={styles.success}>{success}</p> : null}
-            </form>
-          </>
-        ) : (
-          <p className={styles.panelHint}>
-            Entre com sua conta Cursor para criar eventos. Somente pessoas com
-            login podem alterar o painel.
-          </p>
-        )}
+        <p className={styles.panelHint}>Só o nome basta para começar. Só você poderá editar.</p>
+        <form className={styles.form} onSubmit={onCreate}>
+          <label className={styles.label}>
+            Nome do evento
+            <input
+              className={styles.input}
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={120}
+              required
+              placeholder="Ex.: Conferência Aurora 2026"
+              autoComplete="off"
+            />
+          </label>
+          <div className={styles.actions}>
+            <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
+              {saving ? "Salvando…" : "Criar evento"}
+            </button>
+          </div>
+          {error ? <p className={styles.error}>{error}</p> : null}
+          {success ? <p className={styles.success}>{success}</p> : null}
+        </form>
       </section>
     </div>
   );

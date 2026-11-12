@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { forbiddenOwner, requireViewer } from "@/lib/auth";
+import { forbiddenOwner, noStore, requireUser } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import type { StageRow } from "@/lib/types";
 import {
@@ -14,8 +14,6 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-const noStore = { "cache-control": "private, no-store" };
-
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
@@ -24,8 +22,8 @@ function isUuid(value: string): boolean {
 
 export async function POST(request: Request, { params }: Params) {
   try {
-    const identity = await requireViewer(request);
-    if (identity instanceof NextResponse) return identity;
+    const user = await requireUser(request);
+    if (user instanceof NextResponse) return user;
 
     const { id } = await params;
     if (!isUuid(id)) {
@@ -35,8 +33,8 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    const events = await sql<{ id: string; owner_sub: string }>(
-      "select id, owner_sub from events where id = $1",
+    const events = await sql<{ id: string; owner_user_id: string }>(
+      "select id, owner_user_id from events where id = $1",
       [id],
     );
     const event = events[0];
@@ -47,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    if (event.owner_sub !== identity.sub) {
+    if (event.owner_user_id !== user.id) {
       return forbiddenOwner();
     }
 

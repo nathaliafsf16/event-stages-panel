@@ -55,17 +55,18 @@ const SAMPLE_EVENTS = [
   },
 ] as const;
 
-export async function ensureSampleData(ownerSub: string): Promise<boolean> {
-  const rows = await sql<{ count: string | number }>(
-    "select count(*)::int as count from events",
+/** Seeds demo events once per user when they still have none. */
+export async function ensureSampleData(ownerUserId: string): Promise<boolean> {
+  const owned = await sql<{ count: string | number }>(
+    "select count(*)::int as count from events where owner_user_id = $1",
+    [ownerUserId],
   );
-  const count = Number(rows[0]?.count ?? 0);
-  if (count > 0) return false;
+  if (Number(owned[0]?.count ?? 0) > 0) return false;
 
   for (const event of SAMPLE_EVENTS) {
     const created = await sql<{ id: string }>(
-      "insert into events (name, owner_sub) values ($1, $2) returning id",
-      [event.name, ownerSub],
+      "insert into events (name, owner_user_id) values ($1, $2) returning id",
+      [event.name, ownerUserId],
     );
     const eventId = created[0]?.id;
     if (!eventId) continue;
