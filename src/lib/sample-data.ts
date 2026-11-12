@@ -55,7 +55,7 @@ const SAMPLE_EVENTS = [
   },
 ] as const;
 
-export async function ensureSampleData(): Promise<boolean> {
+export async function ensureSampleData(ownerSub: string): Promise<boolean> {
   const rows = await sql<{ count: string | number }>(
     "select count(*)::int as count from events",
   );
@@ -64,8 +64,8 @@ export async function ensureSampleData(): Promise<boolean> {
 
   for (const event of SAMPLE_EVENTS) {
     const created = await sql<{ id: string }>(
-      "insert into events (name) values ($1) returning id",
-      [event.name],
+      "insert into events (name, owner_sub) values ($1, $2) returning id",
+      [event.name, ownerSub],
     );
     const eventId = created[0]?.id;
     if (!eventId) continue;

@@ -17,7 +17,7 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "Gestão de Eventos · Nathália Farias",
   description:
-    "Painel público para listar eventos, criar eventos e organizar etapas de produção.",
+    "Painel com login Cursor para listar eventos, criar eventos e organizar etapas de produção.",
 };
 
 export default function RootLayout({

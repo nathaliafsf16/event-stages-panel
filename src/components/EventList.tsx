@@ -8,7 +8,15 @@ import type { EventRow } from "@/lib/types";
 type EventsResponse = {
   events: EventRow[];
   sample?: boolean;
+  authenticated?: boolean;
   error?: string;
+};
+
+type MeResponse = {
+  authenticated: boolean;
+  name?: string;
+  email?: string;
+  simulated?: boolean;
 };
 
 function formatDate(value: string | Date): string {
@@ -24,11 +32,28 @@ function formatDate(value: string | Date): string {
 export function EventList() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [sample, setSample] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [viewerName, setViewerName] = useState<string | null>(null);
+  const [simulated, setSimulated] = useState(false);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  async function loadMe() {
+    try {
+      const res = await fetch("/api/me", { cache: "no-store" });
+      const data = (await res.json()) as MeResponse;
+      setAuthenticated(Boolean(data.authenticated));
+      setViewerName(data.authenticated ? (data.name ?? "Usuário") : null);
+      setSimulated(Boolean(data.simulated));
+    } catch {
+      setAuthenticated(false);
+      setViewerName(null);
+      setSimulated(false);
+    }
+  }
 
   async function loadEvents() {
     setLoading(true);
@@ -42,6 +67,7 @@ export function EventList() {
       }
       setEvents(data.events);
       setSample(Boolean(data.sample));
+      setAuthenticated(Boolean(data.authenticated));
     } catch {
       setError("Não foi possível carregar os eventos.");
     } finally {
@@ -50,11 +76,16 @@ export function EventList() {
   }
 
   useEffect(() => {
+    void loadMe();
     void loadEvents();
   }, []);
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!authenticated) {
+      setError("Faça login no Cursor para criar eventos.");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -86,12 +117,24 @@ export function EventList() {
   return (
     <div className={styles.layout}>
       <section className={`${styles.panel} rise rise-delay-2`} aria-labelledby="eventos-titulo">
-        <h2 id="eventos-titulo" className={styles.panelTitle}>
-          Eventos
-        </h2>
-        <p className={styles.panelHint}>
-          Abra um evento para ver e incluir as etapas da produção.
-        </p>
+        <div className={styles.panelHead}>
+          <div>
+            <h2 id="eventos-titulo" className={styles.panelTitle}>
+              Eventos
+            </h2>
+            <p className={styles.panelHint}>
+              Abra um evento para ver e incluir as etapas da produção.
+            </p>
+          </div>
+          {authenticated && viewerName ? (
+            <p className={styles.viewerBadge} title={simulated ? "Identidade simulada no preview" : undefined}>
+              {simulated ? "Preview · " : ""}
+              {viewerName}
+            </p>
+          ) : (
+            <p className={styles.viewerBadgeMuted}>Sem login</p>
+          )}
+        </div>
         {sample ? (
           <p className={styles.sampleBadge}>Dados de exemplo para pré-visualização</p>
         ) : null}
@@ -109,6 +152,7 @@ export function EventList() {
                     {Number(item.stage_count ?? 0)} etapa
                     {Number(item.stage_count ?? 0) === 1 ? "" : "s"}
                     {item.created_at ? ` · criado em ${formatDate(item.created_at)}` : ""}
+                    {item.is_owner ? " · seu evento" : ""}
                   </span>
                 </Link>
               </li>
@@ -121,29 +165,38 @@ export function EventList() {
         <h2 id="novo-evento" className={styles.panelTitle}>
           Novo evento
         </h2>
-        <p className={styles.panelHint}>Só o nome basta para começar.</p>
-        <form className={styles.form} onSubmit={onCreate}>
-          <label className={styles.label}>
-            Nome do evento
-            <input
-              className={styles.input}
-              name="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              required
-              placeholder="Ex.: Conferência Aurora 2026"
-              autoComplete="off"
-            />
-          </label>
-          <div className={styles.actions}>
-            <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
-              {saving ? "Salvando…" : "Criar evento"}
-            </button>
-          </div>
-          {error ? <p className={styles.error}>{error}</p> : null}
-          {success ? <p className={styles.success}>{success}</p> : null}
-        </form>
+        {authenticated ? (
+          <>
+            <p className={styles.panelHint}>Só o nome basta para começar. Só você poderá editar.</p>
+            <form className={styles.form} onSubmit={onCreate}>
+              <label className={styles.label}>
+                Nome do evento
+                <input
+                  className={styles.input}
+                  name="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={120}
+                  required
+                  placeholder="Ex.: Conferência Aurora 2026"
+                  autoComplete="off"
+                />
+              </label>
+              <div className={styles.actions}>
+                <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
+                  {saving ? "Salvando…" : "Criar evento"}
+                </button>
+              </div>
+              {error ? <p className={styles.error}>{error}</p> : null}
+              {success ? <p className={styles.success}>{success}</p> : null}
+            </form>
+          </>
+        ) : (
+          <p className={styles.panelHint}>
+            Entre com sua conta Cursor para criar eventos. Somente pessoas com
+            login podem alterar o painel.
+          </p>
+        )}
       </section>
     </div>
   );

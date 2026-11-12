@@ -2,7 +2,9 @@ export type EventRow = {
   id: string;
   name: string;
   created_at: string | Date;
+  owner_sub?: string | null;
   stage_count?: number | string;
+  is_owner?: boolean;
 };
 
 export type StageRow = {

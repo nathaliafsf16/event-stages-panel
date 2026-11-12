@@ -24,6 +24,7 @@ function formatDate(value: string | Date | null): string | null {
 export function EventDetail({ eventId }: Props) {
   const [event, setEvent] = useState<EventRow | null>(null);
   const [stages, setStages] = useState<StageRow[]>([]);
+  const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,8 @@ export function EventDetail({ eventId }: Props) {
   const [stageDate, setStageDate] = useState("");
   const [notes, setNotes] = useState("");
   const [sortOrder, setSortOrder] = useState("");
+
+  const canEdit = Boolean(authenticated && event?.is_owner);
 
   async function load() {
     setLoading(true);
@@ -40,16 +43,19 @@ export function EventDetail({ eventId }: Props) {
       const data = (await res.json()) as {
         event?: EventRow;
         stages?: StageRow[];
+        authenticated?: boolean;
         error?: string;
       };
       if (!res.ok || !data.event) {
         setError(data.error ?? "Evento não encontrado.");
         setEvent(null);
         setStages([]);
+        setAuthenticated(false);
         return;
       }
       setEvent(data.event);
       setStages(data.stages ?? []);
+      setAuthenticated(Boolean(data.authenticated));
     } catch {
       setError("Não foi possível carregar o evento.");
     } finally {
@@ -63,6 +69,10 @@ export function EventDetail({ eventId }: Props) {
 
   async function onAddStage(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
+    if (!canEdit) {
+      setError("Só quem criou este evento pode adicionar etapas.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -144,7 +154,11 @@ export function EventDetail({ eventId }: Props) {
               : `${stages.length} etapa${stages.length === 1 ? "" : "s"} no fluxo.`}
           </p>
           {stages.length === 0 ? (
-            <p className={styles.empty}>Inclua a primeira etapa no formulário abaixo.</p>
+            <p className={styles.empty}>
+              {canEdit
+                ? "Inclua a primeira etapa no formulário abaixo."
+                : "Somente o criador pode incluir etapas."}
+            </p>
           ) : (
             <ol className={styles.stageList}>
               {stages.map((stage) => {
@@ -176,58 +190,70 @@ export function EventDetail({ eventId }: Props) {
           <h2 id="nova-etapa" className={styles.panelTitle}>
             Nova etapa
           </h2>
-          <p className={styles.panelHint}>Nome obrigatório; data, notas e ordem são opcionais.</p>
-          <form className={styles.form} onSubmit={onAddStage}>
-            <label className={styles.label}>
-              Nome da etapa
-              <input
-                className={styles.input}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={120}
-                required
-                placeholder="Ex.: Montagem do palco"
-                autoComplete="off"
-              />
-            </label>
-            <div className={styles.row}>
-              <label className={styles.label}>
-                Data (opcional)
-                <input
-                  className={styles.input}
-                  type="date"
-                  value={stageDate}
-                  onChange={(e) => setStageDate(e.target.value)}
-                />
-              </label>
-              <label className={styles.label}>
-                Ordem (opcional)
-                <input
-                  className={styles.input}
-                  type="number"
-                  min={0}
-                  max={10000}
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  placeholder="Automática"
-                />
-              </label>
-            </div>
-            <label className={styles.label}>
-              Notas (opcional)
-              <textarea
-                className={styles.textarea}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                maxLength={500}
-                placeholder="Observações curtas para a equipe"
-              />
-            </label>
-            <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
-              {saving ? "Salvando…" : "Adicionar etapa"}
-            </button>
-            {error ? <p className={styles.error}>{error}</p> : null}
-          </form>
+          {canEdit ? (
+            <>
+              <p className={styles.panelHint}>
+                Nome obrigatório; data, notas e ordem são opcionais.
+              </p>
+              <form className={styles.form} onSubmit={onAddStage}>
+                <label className={styles.label}>
+                  Nome da etapa
+                  <input
+                    className={styles.input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={120}
+                    required
+                    placeholder="Ex.: Montagem do palco"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className={styles.row}>
+                  <label className={styles.label}>
+                    Data (opcional)
+                    <input
+                      className={styles.input}
+                      type="date"
+                      value={stageDate}
+                      onChange={(e) => setStageDate(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    Ordem (opcional)
+                    <input
+                      className={styles.input}
+                      type="number"
+                      min={0}
+                      max={10000}
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                      placeholder="Automática"
+                    />
+                  </label>
+                </div>
+                <label className={styles.label}>
+                  Notas (opcional)
+                  <textarea
+                    className={styles.textarea}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength={500}
+                    placeholder="Observações curtas para a equipe"
+                  />
+                </label>
+                <button className={styles.button} type="submit" disabled={saving || !name.trim()}>
+                  {saving ? "Salvando…" : "Adicionar etapa"}
+                </button>
+                {error ? <p className={styles.error}>{error}</p> : null}
+              </form>
+            </>
+          ) : (
+            <p className={styles.panelHint}>
+              {authenticated
+                ? "Você pode ver este evento, mas só o criador pode adicionar etapas."
+                : "Faça login no Cursor para alterar etapas dos seus eventos."}
+            </p>
+          )}
         </section>
       </div>
     </div>

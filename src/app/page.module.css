@@ -59,6 +59,14 @@
   padding: 1.25rem;
 }
 
+.panelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
 .panelTitle {
   margin: 0 0 0.35rem;
   font-family: var(--font-display);
@@ -70,6 +78,22 @@
   margin: 0 0 1.1rem;
   color: var(--ink-soft);
   font-size: 0.95rem;
+}
+
+.viewerBadge,
+.viewerBadgeMuted {
+  margin: 0.15rem 0 0;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+
+.viewerBadge {
+  color: var(--sage-deep);
+}
+
+.viewerBadgeMuted {
+  color: var(--ink-soft);
 }
 
 .sampleBadge {
