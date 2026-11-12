@@ -1,0 +1,20 @@
+export type EventRow = {
+  id: string;
+  name: string;
+  created_at: string | Date;
+  stage_count?: number | string;
+};
+
+export type StageRow = {
+  id: string;
+  event_id: string;
+  name: string;
+  stage_date: string | Date | null;
+  notes: string | null;
+  sort_order: number;
+  created_at: string | Date;
+};
+
+export type EventWithStages = EventRow & {
+  stages: StageRow[];
+};
